@@ -5,67 +5,68 @@
 
 #include "control.h"
 
-class lqrControl : public control
-{
-public:
-    lqrControl(const double kp, const double ki, const double kd);
-    ~lqrControl() = default;
+class lqrControl : public control {
+ public:
+  lqrControl(const double kp, const double ki, const double kd);
+  ~lqrControl() = default;
 
-    double calculateCmd(const std::vector<RefPoint>& targetPath, PanoSimSensorBus::Lidar_ObjList_G* pLidar, 
-        PanoSimBasicsBus::Ego* pEgo) override;
+  double calculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
+					  PanoSimBasicsBus::Ego *pEgo) override;
 
-    // ¼ÆËãÇ°ÂÖ×ª½Ç
-    double theta_angle(const std::vector<std::pair<double, double>>& trj_point_array, std::vector<double>& trj_thetas,
-        std::vector<double>& trj_kappas, double currentPositionX, double currentPositionY, double car_yaw);
+  // è®¡ç®—å‰è½®è½¬è§’
+  double theta_angle(const std::vector<std::pair<double, double>> &trj_point_array, std::vector<double> &trj_thetas,
+					 std::vector<double> &trj_kappas, double currentPositionX, double currentPositionY, double car_yaw);
 
-    // ¼ÆËãÎó²î ed ed' ephi ephi'
-    std::array<double, 5> cal_err_k(const std::vector<std::pair<double, double>>& trj_point_array, std::vector<double>& trj_thetas, 
-        std::vector<double>& trj_kappas, double current_post_x, double current_post_y, double car_yaw, int index);
+  // è®¡ç®—è¯¯å·® ed ed' ephi ephi'
+  std::array<double, 5> cal_err_k(const std::vector<std::pair<double, double>> &trj_point_array,
+								  std::vector<double> &trj_thetas,
+								  std::vector<double> &trj_kappas,
+								  double current_post_x,
+								  double current_post_y,
+								  double car_yaw,
+								  int index);
 
-    // ¼ÆËãlqrµÄk1 k2 k3 k4
-    Eigen::Matrix<double, 1, 4> cal_k(std::array<double, 5> err_k);
+  // è®¡ç®—lqrçš„k1 k2 k3 k4
+  Eigen::Matrix<double, 1, 4> cal_k(std::array<double, 5> err_k);
 
-    // ¼ÆËãdlqr
-    Eigen::Matrix<double, 1, 4> cal_dlqr(Eigen::Matrix4d A, Eigen::Matrix<double, 4, 1> B,
-        Eigen::Matrix4d Q, Eigen::Matrix<double, 1, 1> R);
+  // è®¡ç®—dlqr
+  Eigen::Matrix<double, 1, 4> cal_dlqr(Eigen::Matrix4d A, Eigen::Matrix<double, 4, 1> B,
+									   Eigen::Matrix4d Q, Eigen::Matrix<double, 1, 1> R);
 
-    // ¼ÆËãÇ°À¡
-    double cal_forword_angle(Eigen::Matrix<double, 1, 4> k, std::array<double, 5> err_k);
+  // è®¡ç®—å‰é¦ˆ
+  double cal_forword_angle(Eigen::Matrix<double, 1, 4> k, std::array<double, 5> err_k);
 
-    // ¼ÆËã½Ç¶È
-    double cal_angle(Eigen::Matrix<double, 1, 4> k, double forword_angle, std::array<double, 5> err_k, 
-        std::vector<double>& trj_kappas, int index);
+  // è®¡ç®—è§’åº¦
+  double cal_angle(Eigen::Matrix<double, 1, 4> k, double forword_angle, std::array<double, 5> err_k,
+				   std::vector<double> &trj_kappas, int index);
 
+ private:
+  // çºµå‘é€Ÿåº¦
+  double vx;
+  // æ¨ªå‘é€Ÿåº¦
+  double vy;
+  // è½®èƒä¾§ååˆšåº¦
+  double cf, cr;
 
-private:
-    // ×İÏòËÙ¶È
-    double vx;
-    // ºáÏòËÙ¶È
-    double vy;
-    // ÂÖÌ¥²àÆ«¸Õ¶È
-    double cf, cr;
+  // å‰åæ‚¬æ¶è½½è·
+  double m;
 
-    // Ç°ºóĞü¼ÜÔØºÉ
-    double m;
+  // æœ€å¤§çºµå‘åŠ é€Ÿåº¦
+  double max_lateral_acceleration;
+  // æœ€å¤§åˆ¶åŠ¨å‡é€Ÿåº¦
+  double standstill_acceleration;
+  // è½´è·
+  double wheel_base;
+  // å‰è½´ä¸­å¿ƒåˆ°è´¨å¿ƒçš„è·ç¦»
+  double a;
+  // åè½´ä¸­å¿ƒåˆ°è´¨å¿ƒçš„è·ç¦»
+  double b;
 
-    // ×î´ó×İÏò¼ÓËÙ¶È
-    double max_lateral_acceleration;
-    // ×î´óÖÆ¶¯¼õËÙ¶È
-    double standstill_acceleration;
-    // Öá¾à
-    double wheel_base;
-    // Ç°ÖáÖĞĞÄµ½ÖÊĞÄµÄ¾àÀë
-    double a;
-    // ºóÖáÖĞĞÄµ½ÖÊĞÄµÄ¾àÀë
-    double b;
+  // è½¦è¾†ç»•zè½´è½¬åŠ¨çš„è½¬åŠ¨æƒ¯é‡
+  double Iz;
 
-    // ³µÁ¾ÈÆzÖá×ª¶¯µÄ×ª¶¯¹ßÁ¿
-    double Iz;
-
-    // ÂÖÌ¥×î´ó×ª½Ç(rad)
-    double wheel_max_degree;
+  // è½®èƒæœ€å¤§è½¬è§’(rad)
+  double wheel_max_degree;
 };
-
-
 
 #endif __LQR_CONTROL__
