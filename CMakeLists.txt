@@ -19,13 +19,13 @@ add_executable(CICV2022
         include/panoSimApi/Interface.h
         include/panoSimApi/PanoSimApi.h
         include/panoSimApi/SensorBusDef.h
-        src/Sample/control.cpp
+        src/Sample/control.cc
         src/Sample/control.h
-        src/Sample/lqr_control.cpp
+        src/Sample/lqr_control.cc
         src/Sample/lqr_control.h
-        src/Sample/pure_puresuit_control.cpp
+        src/Sample/pure_puresuit_control.cc
         src/Sample/pure_puresuit_control.h
-        src/Sample/reference_line.cpp
+        src/Sample/reference_line.cc
         src/Sample/reference_line.h
         src/Sample/resource.h
-        src/Sample/Sample.cpp)
+        src/Sample/Sample.cc)

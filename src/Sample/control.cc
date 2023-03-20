@@ -1,6 +1,6 @@
 ﻿#include "control.h"
 
-control::control(const double kp, const double ki, const double kd) {
+Control::Control(double kp, double ki, double kd) {
   kp_ = kp;
   ki_ = ki;
   kd_ = kd;
@@ -11,8 +11,8 @@ control::control(const double kp, const double ki, const double kd) {
   first_init_ = true;
 }
 
-// calc forwardindex
-int control::calc_forwardIndex(const std::vector<RefPoint> &targetPath, PanoSimBasicsBus::Ego *pEgo) {
+// calc forward-index
+int Control::CalcForwardIndex(const std::vector<RefPoint> &targetPath, PanoSimBasicsBus::Ego *pEgo) {
 
   int index = 0;
   double min_dis = (std::numeric_limits<int>::max)();
@@ -24,24 +24,24 @@ int control::calc_forwardIndex(const std::vector<RefPoint> &targetPath, PanoSimB
 	  index = i;
 	}
   }
-  int forwardIndex = 0;
+  int forward_index = 0;
   double minProgDist = 3.5;// 3.5
   double progTime = 0.8; // 0.8s
-  double mainVehicleSpeed = pEgo->speed;
-  double progDist = mainVehicleSpeed * progTime > minProgDist ? mainVehicleSpeed * progTime : minProgDist;
+  double main_vehicle_speed = pEgo->speed;
+  double progDist = main_vehicle_speed * progTime > minProgDist ? main_vehicle_speed * progTime : minProgDist;
 
   for (; index < targetPath.size(); ++index) {
-	forwardIndex = index;
+	forward_index = index;
 	double distance = sqrtf((double)pow(targetPath[index].x, 2) +
 		pow((double)targetPath[index].y, 2));
 	if (distance >= progDist) {
-	  return forwardIndex;
+	  return forward_index;
 	}
   }
   return 0;
 }
 
-double control::calculateThrottleBreak(const std::vector<RefPoint> &targetPath,
+double Control::CalculateThrottleBreak(const std::vector<RefPoint> &targetPath,
 									   PanoSimBasicsBus::Ego *pEgo,
 									   size_t forwardIndex) {
   int index = 0;
@@ -55,9 +55,9 @@ double control::calculateThrottleBreak(const std::vector<RefPoint> &targetPath,
 	}
   }
 
-  auto nearKappa = calculateKappa(targetPath, index);
-  auto farKappa = calculateKappa(targetPath, forwardIndex);
-  auto lastKappa = calculateKappa(targetPath, 0);
+  auto nearKappa = CalculateKappa(targetPath, index);
+  auto farKappa = CalculateKappa(targetPath, forwardIndex);
+  auto lastKappa = CalculateKappa(targetPath, 0);
   double this_kappa = 0.01;
   if (nearKappa > farKappa) {
 	this_kappa = nearKappa;
@@ -76,14 +76,14 @@ double control::calculateThrottleBreak(const std::vector<RefPoint> &targetPath,
   std::cout << "targetPath.size() is :" << targetPath.size() << std::endl;
   std::cout << "this_kappa is :" << this_kappa << std::endl;*/
   std::cout << pEgo->speed;
-  return PID_Control(max_v > 5.0 ? 5.0 : max_v, pEgo->speed);
+  return PidControl(max_v > 5.0 ? 5.0 : max_v, pEgo->speed);
 }
 
-double control::PID_Control(double value_target, double value_now) {
+double Control::PidControl(double value_target, double value_now) {
 
   double dt = 0.01;
   if (fabs(integral_) > 5) {
-	reset();
+	Reset();
   }
   this->error_sub_ = (value_target - value_now) - this->previous_error_;
   this->integral_ = this->integral_ + dt * (value_target - value_now);
@@ -118,8 +118,8 @@ double control::PID_Control(double value_target, double value_now) {
   //return control_value;
 }
 
-double control::calculateKappa(const std::vector<RefPoint> &targetPath, int idx) {
-  Point2d_s p1, p2, p3;
+double Control::CalculateKappa(const std::vector<RefPoint> &targetPath, int idx) {
+  Point2d_s p1{}, p2{}, p3{};
   if (idx + 25 < targetPath.size()) {
 	p1.x = targetPath[idx].x;
 	p1.y = targetPath[idx].y;
@@ -151,7 +151,7 @@ double control::calculateKappa(const std::vector<RefPoint> &targetPath, int idx)
 
 }
 
-void control::reset() {
+void Control::Reset() {
   integral_ = 0;
   previous_error_ = 0;
   first_init_ = true;

@@ -30,7 +30,7 @@ struct GlobalData {
   BusAccessor *ego_control, *ego, *ego_extra;
   int times = 0;
   bool flg = false;
-  std::shared_ptr<control> control_base;
+  std::shared_ptr<Control> control_base;
 
 };
 
@@ -48,14 +48,14 @@ void ModelStart(UserData *userData) {
   pGlobal->ego_extra = new BusAccessor(userData->busId, "ego_extral", EGO_EXTRA_FORMAT);
   userData->state = pGlobal;
 
-  // control mode 0:lqr  1:pure_pursuit
+  // Control mode 0:lqr  1:pure_pursuit
   int control_mode = 0;
   switch (control_mode) {
 	case 0:cout << "lqr init!!!";
-	  pGlobal->control_base = std::make_shared<lqrControl>(0.1, 0.06, 0.0);
+	  pGlobal->control_base = std::make_shared<LqrControl>(0.1, 0.06, 0.0);
 	  break;
 	case 1:cout << "pure_puresuit init!!!";
-	  pGlobal->control_base = std::make_shared<purePursuit>(0.1, 0.06, 0.0);
+	  pGlobal->control_base = std::make_shared<PurePursuit>(0.1, 0.06, 0.0);
 	  break;
 	default:break;
   }
@@ -66,7 +66,7 @@ void ModelOutput(UserData *userData) {
   if (userData != nullptr) {
 	auto pGlobal = static_cast<GlobalData *>(userData->state);
 	if (pGlobal != nullptr) {
-	  referenceLine referenceline;// referenceline class init
+	  ReferenceLine referenceline;// referenceline class init
 
 	  Lidar_ObjList_G *pLidar = nullptr;
 	  Ego *pEgo = nullptr;
@@ -76,16 +76,16 @@ void ModelOutput(UserData *userData) {
 		pEgo = static_cast<Ego *>(pGlobal->ego->GetHeader());
 		pEgoExtra = static_cast<EgoExtra *>(pGlobal->ego->GetHeader());
 		// reference_line calc
-		referenceline.shape(pLidar);
-		referenceline.calcCenterPoint();
-		referenceline.sortIndex();
-		referenceline.centerPoint();
+		referenceline.Shape(pLidar);
+		referenceline.CalcCenterPoint();
+		referenceline.SortIndex();
+		referenceline.CenterPoint();
 
 		// interpolation algorithm
 		if (referenceline.get_center_point_xy_sort().size() > 0) {
 		  Eigen::MatrixXd input = vector_eigen(referenceline.get_center_point_xy_sort());
 		  std::vector<std::pair<double, double>> output;
-		  referenceline.average_interpolation(input, output, 0.2, 0.6);
+		  referenceline.AverageInterpolation(input, output, 0.2, 0.6);
 		  referenceline.set_center_point_xy_final(output);
 		  //std::cout << "+++++++++++++++++++++" << std::endl;
 		  /*for (auto line : output) {
@@ -93,9 +93,9 @@ void ModelOutput(UserData *userData) {
 		  }*/
 		}
 		// calc kappa theta
-		referenceline.calc_k_theta();// struct RefPoint
+		referenceline.CalcKTheta();// struct RefPoint
 	  }
-	  // control class
+	  // Control class
 	  EgoControl *pEgoCtrl = nullptr;
 	  if (pGlobal->ego_control != nullptr) {
 		pEgoCtrl = static_cast<EgoControl *>(pGlobal->ego_control->GetHeader());
@@ -103,11 +103,11 @@ void ModelOutput(UserData *userData) {
 		double steer = 0;
 		std::vector<RefPoint> targetPathPoint = referenceline.point;
 
-		steer = pGlobal->control_base->calculateCmd(targetPathPoint, pLidar, pEgo);
-		int forwardIndex = pGlobal->control_base->calc_forwardIndex(targetPathPoint, pEgo);
+		steer = pGlobal->control_base->CalculateCmd(targetPathPoint, pLidar, pEgo);
+		int forwardIndex = pGlobal->control_base->CalcForwardIndex(targetPathPoint, pEgo);
 		cout << "sample steer: " << steer << endl;
-		double thr = pGlobal->control_base->calculateThrottleBreak(targetPathPoint, pEgo, forwardIndex);
-		auto yellodist = referenceline.calculate_yellowdist(referenceline.get_yellow_point_xy_final());
+		double thr = pGlobal->control_base->CalculateThrottleBreak(targetPathPoint, pEgo, forwardIndex);
+		auto yellow_dist = referenceline.CalculateYellowDist(referenceline.get_yellow_point_xy_final());
 
 		pEgoCtrl->time = userData->time;
 		pEgoCtrl->valid = 1;
@@ -122,9 +122,9 @@ void ModelOutput(UserData *userData) {
 		  pEgoCtrl->steer = steer;
 		  pEgoCtrl->mode = 1;
 		  pEgoCtrl->gear = 1;
-		  if (yellodist.second < 1 && yellodist.first > 0 && !pGlobal->flg) {
+		  if (yellow_dist.second < 1 && yellow_dist.first > 0 && !pGlobal->flg) {
 			pGlobal->flg = true;
-		  } else if (yellodist.second < 1 && yellodist.first < 0 && pGlobal->flg) {
+		  } else if (yellow_dist.second < 1 && yellow_dist.first < 0 && pGlobal->flg) {
 			pGlobal->flg = false;
 			pGlobal->times++;
 		  }

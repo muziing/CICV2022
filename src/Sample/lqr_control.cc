@@ -1,6 +1,6 @@
 #include "lqr_control.h"
 
-lqrControl::lqrControl(const double kp, const double ki, const double kd) : control(kp, ki, kd) {
+LqrControl::LqrControl(const double kp, const double ki, const double kd) : Control(kp, ki, kd) {
   // 纵向速度
   vx = 0.1;
   // 横向速度
@@ -31,7 +31,7 @@ lqrControl::lqrControl(const double kp, const double ki, const double kd) : cont
   wheel_max_degree = 0.6;
 }
 
-double lqrControl::calculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
+double LqrControl::CalculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
 								PanoSimBasicsBus::Ego *pEgo) {
   this->vx = -pLidar->items->OBJ_Ego_Vx;
   this->vy = sqrt(abs(pow(pEgo->speed, 2) - pow(pLidar->items->OBJ_Ego_Vx, 2)));
@@ -57,7 +57,7 @@ double lqrControl::calculateCmd(const std::vector<RefPoint> &targetPath, PanoSim
   return out_angle;
 }
 
-double lqrControl::theta_angle(const std::vector<std::pair<double, double>> &trj_point_array,
+double LqrControl::theta_angle(const std::vector<std::pair<double, double>> &trj_point_array,
 							   std::vector<double> &trj_thetas,
 							   std::vector<double> &trj_kappas,
 							   double currentPositionX,
@@ -78,12 +78,12 @@ double lqrControl::theta_angle(const std::vector<std::pair<double, double>> &trj
 	  err_k = cal_err_k(trj_point_array, trj_thetas, trj_kappas, currentPositionX, currentPositionY, car_yaw, index);
   Eigen::Matrix<double, 1, 4> k = cal_k(err_k);
 
-  double forword_angle = cal_forword_angle(k, err_k);
-  double angle = cal_angle(k, forword_angle, err_k, trj_kappas, index);
+  double forward_angle = cal_forward_angle(k, err_k);
+  double angle = cal_angle(k, forward_angle, err_k, trj_kappas, index);
   return angle;
 }
 
-std::array<double, 5> lqrControl::cal_err_k(const std::vector<std::pair<double, double>> &trj_point_array,
+std::array<double, 5> LqrControl::cal_err_k(const std::vector<std::pair<double, double>> &trj_point_array,
 											std::vector<double> &trj_thetas,
 											std::vector<double> &trj_kappas,
 											double current_post_x,
@@ -144,7 +144,7 @@ std::array<double, 5> lqrControl::cal_err_k(const std::vector<std::pair<double, 
   return err_k;
 }
 
-Eigen::Matrix<double, 1, 4> lqrControl::cal_k(std::array<double, 5> err_k) {
+Eigen::Matrix<double, 1, 4> LqrControl::cal_k(std::array<double, 5> err_k) {
   Eigen::Matrix4d A;
   A << 0, 1, 0, 0,
 	  0, (cf + cr) / (m * vx), -(cf + cr) / m, (a * cf - b * cr) / (m * vx),
@@ -171,7 +171,7 @@ Eigen::Matrix<double, 1, 4> lqrControl::cal_k(std::array<double, 5> err_k) {
   return k;
 }
 
-Eigen::Matrix<double, 1, 4> lqrControl::cal_dlqr(Eigen::Matrix4d A, Eigen::Matrix<double, 4, 1> B,
+Eigen::Matrix<double, 1, 4> LqrControl::cal_dlqr(Eigen::Matrix4d A, Eigen::Matrix<double, 4, 1> B,
 												 Eigen::Matrix4d Q, Eigen::Matrix<double, 1, 1> R) {
   // 设置最大循环迭代次数
   int numLoop = 200;
@@ -209,7 +209,7 @@ Eigen::Matrix<double, 1, 4> lqrControl::cal_dlqr(Eigen::Matrix4d A, Eigen::Matri
   return k;
 }
 
-double lqrControl::cal_forword_angle(Eigen::Matrix<double, 1, 4> k,
+double LqrControl::cal_forward_angle(Eigen::Matrix<double, 1, 4> k,
 									 std::array<double, 5> err_k) {
   double k3 = k[2];
   // 不足转向系数
@@ -217,19 +217,19 @@ double lqrControl::cal_forword_angle(Eigen::Matrix<double, 1, 4> k,
 
   //投影点的曲率final_path.k[index]
   double point_curvature = err_k[4];
-  double forword_angle =
+  double forward_angle =
 	  1.5 * (wheel_base * point_curvature + kv * vx * vx * point_curvature -
 		  k3 * (b * point_curvature + a * m * vx * vx * point_curvature / cr / (a + b)));
-  return forword_angle;
+  return forward_angle;
 }
 
-double lqrControl::cal_angle(Eigen::Matrix<double, 1, 4> k, double forword_angle,
+double LqrControl::cal_angle(Eigen::Matrix<double, 1, 4> k, double forward_angle,
 							 std::array<double, 5> err_k, std::vector<double> &trj_kappas, int index) {
   Eigen::Matrix<double, 4, 1> err;
   err << err_k[0], err_k[1], err_k[2], err_k[3];
 
   double feedback = -k * err;
-  double angle = (feedback + forword_angle) * 180 * 3.67 / M_PI;
+  double angle = (feedback + forward_angle) * 180 * 3.67 / M_PI;
 
   if (angle > 135) {
 	angle = 135;

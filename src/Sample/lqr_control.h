@@ -5,12 +5,12 @@
 
 #include "control.h"
 
-class lqrControl : public control {
+class LqrControl : public Control {
  public:
-  lqrControl(const double kp, const double ki, const double kd);
-  ~lqrControl() = default;
+  LqrControl(const double kp, const double ki, const double kd);
+  ~LqrControl() = default;
 
-  double calculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
+  double CalculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
 					  PanoSimBasicsBus::Ego *pEgo) override;
 
   // 计算前轮转角
@@ -34,10 +34,10 @@ class lqrControl : public control {
 									   Eigen::Matrix4d Q, Eigen::Matrix<double, 1, 1> R);
 
   // 计算前馈
-  double cal_forword_angle(Eigen::Matrix<double, 1, 4> k, std::array<double, 5> err_k);
+  double cal_forward_angle(Eigen::Matrix<double, 1, 4> k, std::array<double, 5> err_k);
 
   // 计算角度
-  double cal_angle(Eigen::Matrix<double, 1, 4> k, double forword_angle, std::array<double, 5> err_k,
+  double cal_angle(Eigen::Matrix<double, 1, 4> k, double forward_angle, std::array<double, 5> err_k,
 				   std::vector<double> &trj_kappas, int index);
 
  private:
@@ -69,4 +69,4 @@ class lqrControl : public control {
   double wheel_max_degree;
 };
 
-#endif __LQR_CONTROL__
+#endif

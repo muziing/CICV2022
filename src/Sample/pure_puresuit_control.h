@@ -4,12 +4,12 @@
 #pragma once
 #include "control.h"
 
-class purePursuit : public control {
+class PurePursuit : public Control {
  public:
-  purePursuit(const double kp, const double ki, const double kd);
-  ~purePursuit() = default;
+  PurePursuit(const double kp, const double ki, const double kd);
+  ~PurePursuit() = default;
 
-  double calculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
+  double CalculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
 					  PanoSimBasicsBus::Ego *pEgo) override;
 };
 

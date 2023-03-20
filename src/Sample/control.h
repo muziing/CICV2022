@@ -5,33 +5,31 @@
 #include "reference_line.h"
 
 /**
- * @brief control class, lateral && longitudinal
+ * @brief Control class, lateral && longitudinal
  * 
  */
-static double value_i = 0;
-static double value_last = 0;
-class control {
+class Control {
  public:
-  control(const double kp, const double ki, const double kd);
-  virtual ~control() = default;
+  Control(double kp, double ki, double kd);
+  virtual ~Control() = default;
 
-  // virtual function, base, lqrControl and pure_suit is inherited
-  virtual double calculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
+  // virtual function, base, LqrControl and pure_suit is inherited
+  virtual double CalculateCmd(const std::vector<RefPoint> &targetPath, PanoSimSensorBus::Lidar_ObjList_G *pLidar,
 							  PanoSimBasicsBus::Ego *pEgo) = 0;
 
  public:
-  // calc forwardindex
-  int calc_forwardIndex(const std::vector<RefPoint> &targetPath, PanoSimBasicsBus::Ego *pEgo);
+  // calc forward-index
+  int CalcForwardIndex(const std::vector<RefPoint> &targetPath, PanoSimBasicsBus::Ego *pEgo);
 
-  double calculateThrottleBreak(const std::vector<RefPoint> &targetPath,
+  double CalculateThrottleBreak(const std::vector<RefPoint> &targetPath,
 								PanoSimBasicsBus::Ego *pEgo,
 								size_t forwardIndex);
 
-  double PID_Control(double value_target, double value_now);
+  double PidControl(double value_target, double value_now);
 
-  double calculateKappa(const std::vector<RefPoint> &targetPath, int idx);
+  double CalculateKappa(const std::vector<RefPoint> &targetPath, int idx);
 
-  void reset();
+  void Reset();
 
  protected:
   double kp_ = 0.0;
