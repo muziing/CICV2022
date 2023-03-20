@@ -51,10 +51,10 @@ void ModelStart(UserData *userData) {
   // Control mode 0:lqr  1:pure_pursuit
   int control_mode = 0;
   switch (control_mode) {
-	case 0:cout << "lqr init!!!";
+	case 0:cout << "LQR init!!!";
 	  pGlobal->control_base = std::make_shared<LqrControl>(0.1, 0.06, 0.0);
 	  break;
-	case 1:cout << "pure_puresuit init!!!";
+	case 1:cout << "Pure-pursuit init!!!";
 	  pGlobal->control_base = std::make_shared<PurePursuit>(0.1, 0.06, 0.0);
 	  break;
 	default:break;
@@ -66,7 +66,7 @@ void ModelOutput(UserData *userData) {
   if (userData != nullptr) {
 	auto pGlobal = static_cast<GlobalData *>(userData->state);
 	if (pGlobal != nullptr) {
-	  ReferenceLine referenceline;// referenceline class init
+	  ReferenceLine reference_line;  // 创建一个 reference_line 实例
 
 	  Lidar_ObjList_G *pLidar = nullptr;
 	  Ego *pEgo = nullptr;
@@ -75,39 +75,41 @@ void ModelOutput(UserData *userData) {
 		pLidar = static_cast<Lidar_ObjList_G *>(pGlobal->lidar->GetHeader());
 		pEgo = static_cast<Ego *>(pGlobal->ego->GetHeader());
 		pEgoExtra = static_cast<EgoExtra *>(pGlobal->ego->GetHeader());
-		// reference_line calc
-		referenceline.Shape(pLidar);
-		referenceline.CalcCenterPoint();
-		referenceline.SortIndex();
-		referenceline.CenterPoint();
+		// 计算 reference_line
+		// TODO 重构此段代码，在ReferenceLine类中提供直接输出最终结果的成员函数
+		reference_line.Shape(pLidar);
+		reference_line.CalcCenterPoint();
+		reference_line.SortIndex();
+		reference_line.CenterPoint();
 
 		// interpolation algorithm
-		if (referenceline.get_center_point_xy_sort().size() > 0) {
-		  Eigen::MatrixXd input = vector_eigen(referenceline.get_center_point_xy_sort());
+		// TODO 重构插值算法，放置到ReferenceLine中的一个静态成员函数中
+		if (!reference_line.GetCenterPointXySort().empty()) {
+		  Eigen::MatrixXd input = vector_eigen(reference_line.GetCenterPointXySort());
 		  std::vector<std::pair<double, double>> output;
-		  referenceline.AverageInterpolation(input, output, 0.2, 0.6);
-		  referenceline.set_center_point_xy_final(output);
+		  reference_line.AverageInterpolation(input, output, 0.2, 0.6);
+		  reference_line.SetCenterPointXyFinal(output);
 		  //std::cout << "+++++++++++++++++++++" << std::endl;
 		  /*for (auto line : output) {
 			  cout << line.first << "   " << line.second << endl;
 		  }*/
 		}
 		// calc kappa theta
-		referenceline.CalcKTheta();// struct RefPoint
+		reference_line.CalcKTheta();  // struct RefPoint
 	  }
 	  // Control class
 	  EgoControl *pEgoCtrl = nullptr;
 	  if (pGlobal->ego_control != nullptr) {
 		pEgoCtrl = static_cast<EgoControl *>(pGlobal->ego_control->GetHeader());
 
-		double steer = 0;
-		std::vector<RefPoint> targetPathPoint = referenceline.point;
+		double steer = 0.0;
+		std::vector<RefPoint> target_path_points = reference_line.path_points;  // 最终的期望路径
 
-		steer = pGlobal->control_base->CalculateCmd(targetPathPoint, pLidar, pEgo);
-		int forwardIndex = pGlobal->control_base->CalcForwardIndex(targetPathPoint, pEgo);
+		steer = pGlobal->control_base->CalculateCmd(target_path_points, pLidar, pEgo);
+		int forwardIndex = pGlobal->control_base->CalcForwardIndex(target_path_points, pEgo);
 		cout << "sample steer: " << steer << endl;
-		double thr = pGlobal->control_base->CalculateThrottleBreak(targetPathPoint, pEgo, forwardIndex);
-		auto yellow_dist = referenceline.CalculateYellowDist(referenceline.get_yellow_point_xy_final());
+		double thr = pGlobal->control_base->CalculateThrottleBreak(target_path_points, pEgo, forwardIndex);
+		auto yellow_dist = reference_line.CalculateYellowDist(reference_line.GetYellowPointXyFinal());
 
 		pEgoCtrl->time = userData->time;
 		pEgoCtrl->valid = 1;
@@ -196,9 +198,9 @@ void PrintParameters(UserData *userData) {
 Eigen::MatrixXd vector_eigen(const std::vector<std::pair<double, double>> &input) {
   Eigen::MatrixXd out = Eigen::MatrixXd::Zero(input.size(), 3);
   for (int i = 0; i < input.size(); ++i) {
-	out(i, 0) = input[i].first;// x
-	out(i, 1) = input[i].second;// y
-	out(i, 2) = 0;// z=0
+	out(i, 0) = input[i].first;  // x
+	out(i, 1) = input[i].second;  // y
+	out(i, 2) = 0;  // z=0
   }
   return out;
 }
