@@ -27,7 +27,7 @@ using PanoSimBasicsBus::EgoExtra;
 
 struct GlobalData {
   BusAccessor *lidar;
-  BusAccessor *ego_control, *ego, *ego_extra;
+  BusAccessor *ego_control, *ego;
   int times = 0;
   bool flg = false;
   std::shared_ptr<Control> control_base;
@@ -38,6 +38,7 @@ void PrintParameters(UserData *userData);
 void SplitString(const string_view strSrc, const string_view strSeparator, vector<string> &vctSplitResult);
 Eigen::MatrixXd vector_eigen(const std::vector<std::pair<double, double>> &input);
 
+/// 仿真启动时运行一次的初始化函数
 void ModelStart(UserData *userData) {
   PrintParameters(userData);
 
@@ -45,10 +46,9 @@ void ModelStart(UserData *userData) {
   pGlobal->lidar = new BusAccessor(userData->busId, "Lidar_ObjList_G.0", LIDAR_OBJLIST_G_FORMAT);
   pGlobal->ego_control = new BusAccessor(userData->busId, "ego_control", EGO_CONTROL_FORMAT);
   pGlobal->ego = new BusAccessor(userData->busId, "ego", EGO_FORMAT);
-  pGlobal->ego_extra = new BusAccessor(userData->busId, "ego_extral", EGO_EXTRA_FORMAT);
   userData->state = pGlobal;
 
-  // Control mode 0:lqr  1:pure_pursuit
+  // 横向控制模式 0:LQR  1:纯跟踪
   int control_mode = 0;
   switch (control_mode) {
 	case 0:cout << "LQR init!!!";
@@ -61,21 +61,22 @@ void ModelStart(UserData *userData) {
   }
 }
 
+/// 回调函数（仿真中的主要）
 void ModelOutput(UserData *userData) {
 
   if (userData != nullptr) {
 	auto pGlobal = static_cast<GlobalData *>(userData->state);
 	if (pGlobal != nullptr) {
-	  ReferenceLine reference_line;  // 创建一个 reference_line 实例
-
 	  Lidar_ObjList_G *pLidar = nullptr;
 	  Ego *pEgo = nullptr;
-	  EgoExtra *pEgoExtra = nullptr;
+
+	  ReferenceLine reference_line;  // 创建一个 reference_line 实例
+
 	  if (pGlobal->lidar != nullptr && pGlobal->ego != nullptr) {
 		pLidar = static_cast<Lidar_ObjList_G *>(pGlobal->lidar->GetHeader());
 		pEgo = static_cast<Ego *>(pGlobal->ego->GetHeader());
-		pEgoExtra = static_cast<EgoExtra *>(pGlobal->ego->GetHeader());
-		// 计算 reference_line
+
+		// 路径规划开始
 		// TODO 重构此段代码，在ReferenceLine类中提供直接输出最终结果的成员函数
 		reference_line.Shape(pLidar);
 		reference_line.CalcCenterPoint();
@@ -86,17 +87,17 @@ void ModelOutput(UserData *userData) {
 		// TODO 重构插值算法，放置到ReferenceLine中的一个静态成员函数中
 		if (!reference_line.GetCenterPointXySort().empty()) {
 		  Eigen::MatrixXd input = vector_eigen(reference_line.GetCenterPointXySort());
-		  std::vector<std::pair<double, double>> output;
-		  reference_line.AverageInterpolation(input, output, 0.2, 0.6);
+		  auto output = ReferenceLine::AverageInterpolation(input, 0.2, 0.6);
 		  reference_line.SetCenterPointXyFinal(output);
 		  //std::cout << "+++++++++++++++++++++" << std::endl;
 		  /*for (auto line : output) {
 			  cout << line.first << "   " << line.second << endl;
 		  }*/
 		}
-		// calc kappa theta
-		reference_line.CalcKTheta();  // struct RefPoint
+		reference_line.CalcKappaTheta();  // struct RefPoint
+		// 路径规划结束
 	  }
+
 	  // Control class
 	  EgoControl *pEgoCtrl = nullptr;
 	  if (pGlobal->ego_control != nullptr) {
@@ -108,22 +109,24 @@ void ModelOutput(UserData *userData) {
 		steer = pGlobal->control_base->CalculateCmd(target_path_points, pLidar, pEgo);
 		int forwardIndex = pGlobal->control_base->CalcForwardIndex(target_path_points, pEgo);
 		cout << "sample steer: " << steer << endl;
-		double thr = pGlobal->control_base->CalculateThrottleBreak(target_path_points, pEgo, forwardIndex);
-		auto yellow_dist = reference_line.CalculateYellowDist(reference_line.GetYellowPointXyFinal());
+		double throttle = pGlobal->control_base->CalculateThrottleBreak(target_path_points, pEgo, forwardIndex);
+		auto yellow_dist = ReferenceLine::CalculateYellowDist(reference_line.GetYellowPointXyFinal());
 
 		pEgoCtrl->time = userData->time;
 		pEgoCtrl->valid = 1;
 		if (pGlobal->times < 4) {
-		  if (thr > 0) {
-			pEgoCtrl->throttle = thr;
+		  if (throttle > 0) {
+			pEgoCtrl->throttle = throttle;
 			pEgoCtrl->brake = 0;
 		  } else {
 			pEgoCtrl->throttle = 0;
-			pEgoCtrl->brake = -thr;
+			pEgoCtrl->brake = -throttle;
 		  }
 		  pEgoCtrl->steer = steer;
 		  pEgoCtrl->mode = 1;
 		  pEgoCtrl->gear = 1;
+
+		  // 停车控制 start
 		  if (yellow_dist.second < 1 && yellow_dist.first > 0 && !pGlobal->flg) {
 			pGlobal->flg = true;
 		  } else if (yellow_dist.second < 1 && yellow_dist.first < 0 && pGlobal->flg) {
@@ -134,6 +137,7 @@ void ModelOutput(UserData *userData) {
 		  pEgoCtrl->throttle = 0;
 		  pEgoCtrl->brake = 1;
 		}
+		// 停车控制 end
 	  }
 
 	}
@@ -141,6 +145,7 @@ void ModelOutput(UserData *userData) {
 
 }
 
+/// 仿真结束时运行一次的收尾清理函数
 void ModelTerminate(UserData *userData) {
   if (userData->state != nullptr) {
 	auto pGlobal = static_cast<GlobalData *>(userData->state);
@@ -164,12 +169,12 @@ void SplitString(const string_view strSrc, const string_view strSeparator, vecto
   string::size_type nBegin = 0;
   string::size_type nEnd = strSrc.find(strSeparator);
   while (string::npos != nEnd) {
-	vctSplitResult.emplace_back(move(strSrc.substr(nBegin, nEnd - nBegin)));
+	vctSplitResult.emplace_back(strSrc.substr(nBegin, nEnd - nBegin));
 	nBegin = nEnd + strSeparator.size();
 	nEnd = strSrc.find(strSeparator, nBegin);
   }
   if (nBegin != strSrc.length()) {
-	vctSplitResult.emplace_back(move(strSrc.substr(nBegin)));
+	vctSplitResult.emplace_back(strSrc.substr(nBegin));
   }
 }
 
@@ -204,14 +209,3 @@ Eigen::MatrixXd vector_eigen(const std::vector<std::pair<double, double>> &input
   }
   return out;
 }
-
-
-
-//size_t mactPoint(std::vector<std::pair<double, double>> &path) {
-//    std::vector<double> pts;
-//    for (size_t i = 0; i < path.size(); ++i) {
-//        pts.push_back(pow((double)path[i].first, 2) + pow((double)path[i].second, 2));
-//    }
-//    size_t index = std::min_element(pts.begin(), pts.end()) - pts.begin();
-//    return index;
-//}

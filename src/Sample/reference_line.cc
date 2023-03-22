@@ -87,6 +87,7 @@ void ReferenceLine::SortIndex() {
 
 }
 
+// TODO 重构此函数，尝试用STL或其他更高效的方式进行原地排序
 void ReferenceLine::CenterPoint() {
   for (int i = 0; i < this->center_point_xy.size() / 10; ++i) {
 	this->center_point_xy_sort.emplace_back(this->center_point_xy[this->match_point_index_set_cen[i]].first,
@@ -94,14 +95,13 @@ void ReferenceLine::CenterPoint() {
   }
 }
 
-// TODO 重构此函数，改为静态、按返回值输出
-void ReferenceLine::AverageInterpolation(const Eigen::MatrixXd &input,
-										 std::vector<std::pair<double, double>> &output,
-										 double interval_dis,
-										 double distance_threshold) {
-  // 1.定义一个容器，类型为Point3d_s,即（x,y,z）
-  std::vector<Point3d_s> vec_3d;
-  Point3d_s p{};
+std::vector<std::pair<double, double>> ReferenceLine::AverageInterpolation(const Eigen::MatrixXd &input,
+																		   double interval_dis,
+																		   double distance_threshold) {
+  std::vector<std::pair<double, double>> output;
+  // 1.定义一个容器，类型为Point2d_s,即（x, y）
+  std::vector<Point2d_s> vec_2d;
+  Point2d_s p{};
   // 2.遍历
   for (int i = 0; i < input.rows() - 1; ++i) {
 	double dis = (input.row(i + 1) - input.row(i)).norm();
@@ -120,30 +120,27 @@ void ReferenceLine::AverageInterpolation(const Eigen::MatrixXd &input,
 		// i=0,j=0
 		p.x = input(i, 0) + j * interval_dis * cos_a;
 		p.y = input(i, 1) + j * interval_dis * sin_a;
-		p.z = input(i, 2);
-		vec_3d.push_back(p);
+		vec_2d.push_back(p);
 	  }
 	} else {
 	  // 有些点原本比较近，不需要插点，但是也要补进去，不然会缺失,dis >= 1防止点太密集
 	  p.x = input(i, 0);
 	  p.y = input(i, 1);
-	  p.z = input(i, 2);
-	  vec_3d.push_back(p);
+	  vec_2d.push_back(p);
 	}
   }
   // 3.漏了终点，需要加上
   p.x = input(input.rows() - 1, 0);
   p.y = input(input.rows() - 1, 1);
-  p.z = input(input.rows() - 1, 2);
-  vec_3d.push_back(p);
+  vec_2d.push_back(p);
   // 4.output
-  for (auto &it : vec_3d) {
+  for (auto &it : vec_2d) {
 	output.emplace_back(it.x, it.y);
   }
-
+  return output;
 }
 
-void ReferenceLine::CalcKTheta() {
+void ReferenceLine::CalcKappaTheta() {
   std::vector<std::pair<double, double>> xy_set = this->GetCenterPointXyFinal();  // 得到中心点
   // 差分
   std::deque<std::pair<double, double>> dxy;
@@ -193,7 +190,7 @@ void ReferenceLine::CalcKTheta() {
 //		std::cout << sin(theta_final) / ds_final[i] << "\t";
 //	}
   }
-  std::cout << std::endl;
+//  std::cout << std::endl;
 }
 
 double ReferenceLine::CalculateKappa(Point2d_s p1, Point2d_s p2, Point2d_s p3) {
@@ -242,4 +239,17 @@ void ReferenceLine::GetKappa(std::vector<std::pair<double, double>> final_center
   r.y = b.y;
   r.kappa = k2;
   RefMsg.emplace_back(r);
+}
+
+std::pair<double, double> ReferenceLine::CalculateYellowDist(const std::vector<std::pair<double,
+																						 double>> &target_path) {
+  double x = 0, y = 0;
+  for (auto point : target_path) {
+	x += point.first;
+	y += point.second;
+  }
+  auto target_path_size = double(target_path.size());  // 避免向小范围隐式类型转换导致的编译器警告
+  double yellow_dist = pow(x / target_path_size, 2)
+	  + pow(y / target_path_size, 2);
+  return std::make_pair(x / target_path_size, yellow_dist);  // x_center dis
 }
