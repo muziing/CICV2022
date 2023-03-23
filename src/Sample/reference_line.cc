@@ -1,5 +1,3 @@
-#include <iostream>
-#include <deque>
 #include "reference_line.h"
 
 void ReferenceLine::Shape(PanoSimSensorBus::Lidar_ObjList_G *pLidar) {
@@ -33,6 +31,7 @@ void ReferenceLine::CalcCenterPoint() {
 	for (int j = 0; j < this->in_xy.size(); ++j) {
 	  double dis = pow(i.first - this->in_xy[j].first, 2)
 		  + pow(i.second - this->in_xy[j].second, 2);
+	  // FIXME 这里的欧氏距离计算为什么不用 MatrixBase<Derived>::norm() 了？
 	  if (dis < min_dis) {
 		min_dis = dis;
 		k = j;
@@ -95,51 +94,6 @@ void ReferenceLine::CenterPoint() {
   }
 }
 
-std::vector<std::pair<double, double>> ReferenceLine::AverageInterpolation(const Eigen::MatrixXd &input,
-																		   double interval_dis,
-																		   double distance_threshold) {
-  std::vector<std::pair<double, double>> output;
-  // 1.定义一个容器，类型为Point2d_s,即（x, y）
-  std::vector<Point2d_s> vec_2d;
-  Point2d_s p{};
-  // 2.遍历
-  for (int i = 0; i < input.rows() - 1; ++i) {
-	double dis = (input.row(i + 1) - input.row(i)).norm();
-	// 距离过长进行插点
-	if (dis >= distance_threshold) {
-	  // 计算(x,y)两点的距离
-	  double sqrt_val = sqrt((input(i + 1, 0) - input(i, 0)) * (input(i + 1, 0) - input(i, 0)) +
-		  (input(i + 1, 1) - input(i, 1)) * (input(i + 1, 1) - input(i, 1)));
-	  // 计算角度
-	  double sin_a = (input(i + 1, 1) - input(i, 1)) / sqrt_val;
-	  double cos_a = (input(i + 1, 0) - input(i, 0)) / sqrt_val;
-	  // 两点之间要插值的插值点的数量
-	  int num = int(dis / interval_dis);
-	  // 插入点
-	  for (int j = 0; j < num; j++) {
-		// i=0,j=0
-		p.x = input(i, 0) + j * interval_dis * cos_a;
-		p.y = input(i, 1) + j * interval_dis * sin_a;
-		vec_2d.push_back(p);
-	  }
-	} else {
-	  // 有些点原本比较近，不需要插点，但是也要补进去，不然会缺失,dis >= 1防止点太密集
-	  p.x = input(i, 0);
-	  p.y = input(i, 1);
-	  vec_2d.push_back(p);
-	}
-  }
-  // 3.漏了终点，需要加上
-  p.x = input(input.rows() - 1, 0);
-  p.y = input(input.rows() - 1, 1);
-  vec_2d.push_back(p);
-  // 4.output
-  for (auto &it : vec_2d) {
-	output.emplace_back(it.x, it.y);
-  }
-  return output;
-}
-
 void ReferenceLine::CalcKappaTheta() {
   std::vector<std::pair<double, double>> xy_set = this->GetCenterPointXyFinal();  // 得到中心点
   // 差分
@@ -193,18 +147,6 @@ void ReferenceLine::CalcKappaTheta() {
 //  std::cout << std::endl;
 }
 
-double ReferenceLine::CalculateKappa(Point2d_s p1, Point2d_s p2, Point2d_s p3) {
-  double a, b, c, sinA, cosA, r, k;
-  a = sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y));
-  b = sqrt((p2.x - p3.x) * (p2.x - p3.x) + (p2.y - p3.y) * (p2.y - p3.y));
-  c = sqrt((p3.x - p1.x) * (p3.x - p1.x) + (p3.y - p1.y) * (p3.y - p1.y));
-  cosA = (b * b + c * c - a * a) / (2 * b * c);
-  sinA = sqrt(1 - cosA * cosA);
-  r = 0.5 * a / sinA;
-  k = 1 / r;
-  return k;
-}
-
 void ReferenceLine::GetKappa(std::vector<std::pair<double, double>> final_center_point_xy) {
   Point2d_s p1{}, p2{}, a{}, b{}, c{};
   p1.x = final_center_point_xy[0].first;
@@ -219,7 +161,7 @@ void ReferenceLine::GetKappa(std::vector<std::pair<double, double>> final_center
 	b.y = final_center_point_xy[i + 1].second;
 	c.x = final_center_point_xy[i + 2].first;
 	c.y = final_center_point_xy[i + 2].second;
-	double k = ReferenceLine::CalculateKappa(a, b, c);
+	double k = CalculateKappa(a, b, c);
 	r.x = a.x;
 	r.y = a.y;
 	r.kappa = k;
@@ -252,4 +194,71 @@ std::pair<double, double> ReferenceLine::CalculateYellowDist(const std::vector<s
   double yellow_dist = pow(x / target_path_size, 2)
 	  + pow(y / target_path_size, 2);
   return std::make_pair(x / target_path_size, yellow_dist);  // x_center dis
+}
+
+double CalculateKappa(Point2d_s p1, Point2d_s p2, Point2d_s p3) {
+  double a, b, c, sinA, cosA, r, k;
+  a = sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y));
+  b = sqrt((p2.x - p3.x) * (p2.x - p3.x) + (p2.y - p3.y) * (p2.y - p3.y));
+  c = sqrt((p3.x - p1.x) * (p3.x - p1.x) + (p3.y - p1.y) * (p3.y - p1.y));
+  cosA = (b * b + c * c - a * a) / (2 * b * c);
+  sinA = sqrt(1 - cosA * cosA);
+  r = 0.5 * a / sinA;
+  k = 1 / r;
+  return k;
+}
+
+Eigen::MatrixXd VectorToEigenMatrix(const std::vector<std::pair<double, double>> &input) {
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero((long long)input.size(), 2);
+  for (long long i = 0; i < input.size(); ++i) {
+	out(i, 0) = input[i].first;  // 第1列为x坐标
+	out(i, 1) = input[i].second;  // 第2列为y坐标
+  }
+  return out;
+}
+
+std::vector<std::pair<double, double>> AverageInterpolation(const std::vector<std::pair<double, double>> &points,
+															double interval_dis,
+															double dis_threshold) {
+  Eigen::MatrixXd input = VectorToEigenMatrix(points);  // 先转换为矩阵，方便计算
+  std::vector<std::pair<double, double>> output;  // 最终输出时再转换回vector
+  // 1.定义一个容器，类型为Point2d_s,即（x, y）
+  std::vector<Point2d_s> vec_2d;
+  Point2d_s p{};
+  // 2.遍历
+  for (long long i = 0; i < input.rows() - 1; ++i) {
+	double dis = (input.row(i + 1) - input.row(i)).norm();  // 该点到下一点的距离
+	// 对间距太长的两点间进行插点
+	if (dis >= dis_threshold) {
+	  // 计算(x,y)两点的距离
+	  double sqrt_val = sqrt((input(i + 1, 0) - input(i, 0)) * (input(i + 1, 0) - input(i, 0)) +
+		  (input(i + 1, 1) - input(i, 1)) * (input(i + 1, 1) - input(i, 1)));
+	  // 计算角度
+	  double sin_a = (input(i + 1, 1) - input(i, 1)) / sqrt_val;
+	  double cos_a = (input(i + 1, 0) - input(i, 0)) / sqrt_val;
+	  // 两点之间要插值的插值点的数量
+	  int num = int(dis / interval_dis);
+	  // 插入点
+	  for (int j = 0; j < num; j++) {
+		// i=0,j=0
+		p.x = input(i, 0) + j * interval_dis * cos_a;
+		p.y = input(i, 1) + j * interval_dis * sin_a;
+		vec_2d.push_back(p);
+	  }
+	} else {
+	  // 有些点原本比较近，不需要插点，但是也要补进去，不然会缺失,dis >= 1防止点太密集
+	  p.x = input(i, 0);
+	  p.y = input(i, 1);
+	  vec_2d.push_back(p);
+	}
+  }
+  // 3.补回最后一个点
+  p.x = input(input.rows() - 1, 0);
+  p.y = input(input.rows() - 1, 1);
+  vec_2d.push_back(p);
+  // 4.output
+  for (auto &it : vec_2d) {
+	output.emplace_back(it.x, it.y);
+  }
+  return output;
 }

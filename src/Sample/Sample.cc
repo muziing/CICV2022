@@ -1,8 +1,6 @@
 #include <PanoSimApi.h>
 #include <string>
 #include <string_view>
-#include <vector>
-#include <iostream>
 #include <fstream>
 
 #include "control.h"
@@ -36,7 +34,6 @@ struct GlobalData {
 
 void PrintParameters(UserData *userData);
 void SplitString(const string_view strSrc, const string_view strSeparator, vector<string> &vctSplitResult);
-Eigen::MatrixXd vector_eigen(const std::vector<std::pair<double, double>> &input);
 
 /// 仿真启动时运行一次的初始化函数
 void ModelStart(UserData *userData) {
@@ -83,11 +80,10 @@ void ModelOutput(UserData *userData) {
 		reference_line.SortIndex();
 		reference_line.CenterPoint();
 
-		// interpolation algorithm
-		// TODO 重构插值算法，放置到ReferenceLine中的一个静态成员函数中
+		// 插值
 		if (!reference_line.GetCenterPointXySort().empty()) {
-		  Eigen::MatrixXd input = vector_eigen(reference_line.GetCenterPointXySort());
-		  auto output = ReferenceLine::AverageInterpolation(input, 0.2, 0.6);
+		  std::vector<std::pair<double, double>>
+			  output = AverageInterpolation(reference_line.GetCenterPointXySort(), 0.2, 0.6);
 		  reference_line.SetCenterPointXyFinal(output);
 		  //std::cout << "+++++++++++++++++++++" << std::endl;
 		  /*for (auto line : output) {
@@ -101,16 +97,19 @@ void ModelOutput(UserData *userData) {
 	  // Control class
 	  EgoControl *pEgoCtrl = nullptr;
 	  if (pGlobal->ego_control != nullptr) {
+		double steer = 0.0;
 		pEgoCtrl = static_cast<EgoControl *>(pGlobal->ego_control->GetHeader());
 
-		double steer = 0.0;
+		// FIXME 可能存在的问题：如果不满足上一段的条件语句，未进行路径规划，则reference_line.path_points为空，会引起后续问题吧
+		// 所以上一段的条件语句是干啥用的？
 		std::vector<RefPoint> target_path_points = reference_line.path_points;  // 最终的期望路径
 
 		steer = pGlobal->control_base->CalculateCmd(target_path_points, pLidar, pEgo);
 		int forwardIndex = pGlobal->control_base->CalcForwardIndex(target_path_points, pEgo);
-		cout << "sample steer: " << steer << endl;
+		// cout << "sample steer: " << steer << endl;
 		double throttle = pGlobal->control_base->CalculateThrottleBreak(target_path_points, pEgo, forwardIndex);
-		auto yellow_dist = ReferenceLine::CalculateYellowDist(reference_line.GetYellowPointXyFinal());
+		std::pair<double, double>
+			yellow_dist = ReferenceLine::CalculateYellowDist(reference_line.GetYellowPointXyFinal());
 
 		pEgoCtrl->time = userData->time;
 		pEgoCtrl->valid = 1;
@@ -126,7 +125,7 @@ void ModelOutput(UserData *userData) {
 		  pEgoCtrl->mode = 1;
 		  pEgoCtrl->gear = 1;
 
-		  // 停车控制 start
+		  // 停车控制 begin
 		  if (yellow_dist.second < 1 && yellow_dist.first > 0 && !pGlobal->flg) {
 			pGlobal->flg = true;
 		  } else if (yellow_dist.second < 1 && yellow_dist.first < 0 && pGlobal->flg) {
@@ -139,10 +138,8 @@ void ModelOutput(UserData *userData) {
 		}
 		// 停车控制 end
 	  }
-
 	}
   }
-
 }
 
 /// 仿真结束时运行一次的收尾清理函数
@@ -197,15 +194,4 @@ void PrintParameters(UserData *userData) {
 	  cout << strParameter << endl;
 	}
   }
-}
-
-// vector eigen type transform
-Eigen::MatrixXd vector_eigen(const std::vector<std::pair<double, double>> &input) {
-  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(input.size(), 3);
-  for (int i = 0; i < input.size(); ++i) {
-	out(i, 0) = input[i].first;  // x
-	out(i, 1) = input[i].second;  // y
-	out(i, 2) = 0;  // z=0
-  }
-  return out;
 }

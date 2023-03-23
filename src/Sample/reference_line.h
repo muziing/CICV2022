@@ -2,13 +2,15 @@
 #define reference_line_
 #pragma once
 
-#include<iostream>
+#include <iostream>
 #include <vector>
+#include <deque>
+#include <cmath>
+
 #include <Eigen/Eigen>
+
 #include <SensorBusDef.h>
 #include <BasicsBusDef.h>
-//#include <cmath>
-
 
 struct Point2d_s {
   double x;
@@ -30,7 +32,7 @@ class ReferenceLine {
   /**
    * @brief 按颜色分别存储所有锥桶坐标
    *
-   * @param pLidar
+   * @param pLidar 目标级激光雷达传感器返回的数据
    */
   void Shape(PanoSimSensorBus::Lidar_ObjList_G *pLidar);
 
@@ -49,20 +51,16 @@ class ReferenceLine {
   */
   void CenterPoint();
 
-  /**
-   * @brief 插值算法
-   *
-   * @param input enter_point_xy_sort
-   * @param output enter_point_xy_final
-   * @param interval_dis 插值间距
-   * @param distance_threshold 距离阈值，两点间距离大于此值则进行插值
-   */
-  static std::vector<std::pair<double, double>> AverageInterpolation(const Eigen::MatrixXd &input,
-																	 double interval_dis,
-																	 double distance_threshold);
-
-  /// 计算 Kappa theta,并保存至 path_points 中
+  /// 计算 Kappa 与 theta,并保存至 path_points 中
   void CalcKappaTheta();
+
+  /// 一个迷之又迷、从未被调用过的函数
+  void GetKappa(std::vector<std::pair<double, double>> final_center_point_xy);
+
+  /**
+  * @brief 计算到黄色锥桶的距离
+  */
+  static std::pair<double, double> CalculateYellowDist(const std::vector<std::pair<double, double>> &target_path);
 
   std::vector<std::pair<double, double>> GetCenterPointXySort() {
 	return this->center_point_xy_sort;
@@ -77,14 +75,6 @@ class ReferenceLine {
   void SetCenterPointXyFinal(const std::vector<std::pair<double, double>> &center_points) {
 	this->center_point_xy_final = center_points;  // FIXME 在进行插值计算之后自动设置，而不是显式调用此函数
   }
-  static double CalculateKappa(Point2d_s p1, Point2d_s p2, Point2d_s p3);  // FIXME 理清和GetKappa的关系
-
-  void GetKappa(std::vector<std::pair<double, double>> final_center_point_xy);
-
-  /**
-  * @brief 计算到黄色锥桶的距离
-  */
-  static std::pair<double, double> CalculateYellowDist(const std::vector<std::pair<double, double>> &target_path);
 
  public:
   std::vector<RefPoint> path_points;  // 最终输出的点 x, y, kappa, theta
@@ -104,5 +94,21 @@ class ReferenceLine {
   std::vector<RefPoint> RefMsg; // FIXME 貌似没用用上，干什么用的？
 };
 
-#endif  // reference_line_
+/// 辅助函数，用于计算曲率 kappa
+double CalculateKappa(Point2d_s p1, Point2d_s p2, Point2d_s p3);
 
+/// 辅助函数，将vector中保存的(x, y)坐标转换为 eigen 的矩阵类型
+Eigen::MatrixXd VectorToEigenMatrix(const std::vector<std::pair<double, double>> &input);
+
+/**
+ * @brief 插值算法
+ *
+ * @param points 待插值的曲线点集
+ * @param interval_dis 插值间距
+ * @param dis_threshold 距离阈值，两点间距离大于此值则进行插值
+ */
+std::vector<std::pair<double, double>> AverageInterpolation(const std::vector<std::pair<double, double>> &points,
+															double interval_dis,
+															double dis_threshold);
+
+#endif  // reference_line_
