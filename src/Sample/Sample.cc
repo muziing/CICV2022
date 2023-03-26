@@ -26,10 +26,9 @@ using PanoSimBasicsBus::EgoExtra;
 struct GlobalData {
   BusAccessor *lidar;
   BusAccessor *ego_control, *ego;
-  int times = 0;
+  int times = 0;  // 经过起终点的次数（由此推出当前圈数）
   bool flg = false;
   std::shared_ptr<Control> control_base;
-
 };
 
 void PrintParameters(UserData *userData);
@@ -75,10 +74,9 @@ void ModelOutput(UserData *userData) {
 
 		// 路径规划开始
 		// TODO 重构此段代码，在ReferenceLine类中提供直接输出最终结果的成员函数
-		reference_line.Shape(pLidar);
-		reference_line.CalcCenterPoint();
-		reference_line.SortIndex();
-		reference_line.CenterPoint();
+		reference_line.LoadTrafficConeData(pLidar);
+		reference_line.CalcCenterPoints();
+		reference_line.SortCenterPoints();
 
 		// 插值
 		if (!reference_line.GetCenterPointXySort().empty()) {
@@ -109,7 +107,7 @@ void ModelOutput(UserData *userData) {
 		// cout << "sample steer: " << steer << endl;
 		double throttle = pGlobal->control_base->CalculateThrottleBreak(target_path_points, pEgo, forwardIndex);
 		std::pair<double, double>
-			yellow_dist = ReferenceLine::CalculateYellowDist(reference_line.GetYellowPointXyFinal());
+			yellow_dist = CalculateYellowDist(reference_line.GetYellowPoints());
 
 		pEgoCtrl->time = userData->time;
 		pEgoCtrl->valid = 1;
@@ -133,6 +131,7 @@ void ModelOutput(UserData *userData) {
 			pGlobal->times++;
 		  }
 		} else {
+		  // 已经是第四次经过黄色锥桶
 		  pEgoCtrl->throttle = 0;
 		  pEgoCtrl->brake = 1;
 		}
@@ -161,20 +160,7 @@ void ModelTerminate(UserData *userData) {
   }
 }
 
-void SplitString(const string_view strSrc, const string_view strSeparator, vector<string> &vctSplitResult) {
-  vctSplitResult.clear();
-  string::size_type nBegin = 0;
-  string::size_type nEnd = strSrc.find(strSeparator);
-  while (string::npos != nEnd) {
-	vctSplitResult.emplace_back(strSrc.substr(nBegin, nEnd - nBegin));
-	nBegin = nEnd + strSeparator.size();
-	nEnd = strSrc.find(strSeparator, nBegin);
-  }
-  if (nBegin != strSrc.length()) {
-	vctSplitResult.emplace_back(strSrc.substr(nBegin));
-  }
-}
-
+/// 辅助函数，调试用，打印输出 parameters
 void PrintParameters(UserData *userData) {
   for (const auto &pairItem : userData->parameters) {
 	cout << pairItem.first << ":" << pairItem.second << endl;
@@ -193,5 +179,20 @@ void PrintParameters(UserData *userData) {
 	for (const auto &strParameter : vctParameter) {
 	  cout << strParameter << endl;
 	}
+  }
+}
+
+/// 辅助函数，由指定的标识符分割字符串
+void SplitString(const string_view strSrc, const string_view strSeparator, vector<string> &vctSplitResult) {
+  vctSplitResult.clear();
+  string::size_type nBegin = 0;
+  string::size_type nEnd = strSrc.find(strSeparator);
+  while (string::npos != nEnd) {
+	vctSplitResult.emplace_back(strSrc.substr(nBegin, nEnd - nBegin));
+	nBegin = nEnd + strSeparator.size();
+	nEnd = strSrc.find(strSeparator, nBegin);
+  }
+  if (nBegin != strSrc.length()) {
+	vctSplitResult.emplace_back(strSrc.substr(nBegin));
   }
 }

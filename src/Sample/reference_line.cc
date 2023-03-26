@@ -1,6 +1,6 @@
 #include "reference_line.h"
 
-void ReferenceLine::Shape(PanoSimSensorBus::Lidar_ObjList_G *pLidar) {
+void ReferenceLine::LoadTrafficConeData(PanoSimSensorBus::Lidar_ObjList_G *pLidar) {
   //std::cout << "---------" << std::endl;
   for (int i = 0; i < pLidar->header.width; ++i) {
 	if (pLidar->items[i].shape == 2) {
@@ -22,9 +22,10 @@ void ReferenceLine::Shape(PanoSimSensorBus::Lidar_ObjList_G *pLidar) {
   }
 }
 
-void ReferenceLine::CalcCenterPoint() {
+void ReferenceLine::CalcCenterPoints() {
+  std::vector<int> match_point_index_set;  // 存储内外侧锥桶间相匹配关系的索引
   for (auto &i : this->out_xy) {
-	double min_dis = std::numeric_limits<int>::max();  // 以极大的数初始化最小距离，避免干扰
+	double min_dis = std::numeric_limits<double>::max();  // 以极大的数初始化最小距离，避免干扰
 	int k = 0;
 
 	// 匹配最近的内外侧锥桶对
@@ -37,41 +38,43 @@ void ReferenceLine::CalcCenterPoint() {
 		k = j;
 	  }
 	}
-	this->match_point_index_set.push_back(k);
+	match_point_index_set.push_back(k);
   }
 
   // 选出内外侧锥桶数中较少的一组
   size_t num_selected = this->in_xy.size() < this->out_xy.size() ? this->in_xy.size() : this->out_xy.size();
 
   for (size_t i = 0; i < num_selected; ++i) {
-	this->center_point_xy.emplace_back((this->out_xy[i].first + this->in_xy[this->match_point_index_set[i]].first) / 2,
-									   (this->out_xy[i].second + this->in_xy[this->match_point_index_set[i]].second)
+	this->center_point_xy.emplace_back((this->out_xy[i].first + this->in_xy[match_point_index_set[i]].first) / 2,
+									   (this->out_xy[i].second + this->in_xy[match_point_index_set[i]].second)
 										   / 2);
   }
 }
 
-void ReferenceLine::SortIndex() {
+void ReferenceLine::SortCenterPoints() {
   int index_cen = 0;
+  std::vector<int> match_point_index_set_cen;
   std::vector<int> have_seen(this->center_point_xy.size());
-  double min_dis = (std::numeric_limits<int>::max)();
+  double min_dis = std::numeric_limits<double>::max();
+
+  // 找到车后方最近的锥桶的索引
   for (int i = 0; i < this->center_point_xy.size(); ++i) {
 	double dis = pow(this->center_point_xy[i].first, 2) + pow(this->center_point_xy[i].second, 2);
 	if (dis < min_dis && center_point_xy[i].first < 0) {
-	  // 确保是位于车身后边最近的点
 	  min_dis = dis;
 	  index_cen = i;
 	}
   }
   have_seen[index_cen] = 1;  // 排好序的点标记为1
-  this->match_point_index_set_cen.push_back(index_cen);
+  match_point_index_set_cen.push_back(index_cen);
 
   int num = 0, j = 0, flag = -1;
-  while (this->match_point_index_set_cen.size() < static_cast<int>(this->center_point_xy.size() / 10)) {
-	min_dis = (std::numeric_limits<int>::max)();
+  while (match_point_index_set_cen.size() < (this->center_point_xy.size() / 10)) {
+	min_dis = std::numeric_limits<double>::max();
 	for (int i = 0; i < this->center_point_xy.size(); ++i) {
 	  double dis =
-		  pow(this->center_point_xy[i].first - this->center_point_xy[this->match_point_index_set_cen[num]].first, 2) +
-			  pow(this->center_point_xy[i].second - this->center_point_xy[this->match_point_index_set_cen[num]].second,
+		  pow(this->center_point_xy[i].first - this->center_point_xy[match_point_index_set_cen[num]].first, 2) +
+			  pow(this->center_point_xy[i].second - this->center_point_xy[match_point_index_set_cen[num]].second,
 				  2);
 	  if (dis < min_dis && have_seen[i] != 1 && (flag > 0 ? 1 : center_point_xy[i].first > 0)) {
 		j = i;
@@ -79,25 +82,22 @@ void ReferenceLine::SortIndex() {
 	  }
 	}
 	flag++;
-	this->match_point_index_set_cen.push_back(j);
+	match_point_index_set_cen.push_back(j);
 	have_seen[j] = 1;
 	num++;
   }
 
-}
-
-// TODO 重构此函数，尝试用STL或其他更高效的方式进行原地排序
-void ReferenceLine::CenterPoint() {
+  // 按索引进行实际的排序
   for (int i = 0; i < this->center_point_xy.size() / 10; ++i) {
-	this->center_point_xy_sort.emplace_back(this->center_point_xy[this->match_point_index_set_cen[i]].first,
-											this->center_point_xy[this->match_point_index_set_cen[i]].second);
+	this->center_points_xy_sorted.emplace_back(this->center_point_xy[match_point_index_set_cen[i]].first,
+											   this->center_point_xy[match_point_index_set_cen[i]].second);
   }
 }
 
 void ReferenceLine::CalcKappaTheta() {
   std::vector<std::pair<double, double>> xy_set = this->GetCenterPointXyFinal();  // 得到中心点
   // 差分
-  std::deque<std::pair<double, double>> dxy;
+  std::deque<std::pair<double, double>> dxy;  // (Δx, Δy)
   for (int i = 0; i < xy_set.size() - 1; ++i) {
 	double dx = xy_set[i + 1].first - xy_set[i].first;
 	double dy = xy_set[i + 1].second - xy_set[i].second;
@@ -114,6 +114,7 @@ void ReferenceLine::CalcKappaTheta() {
 	double dy = (dxy_pre[i].second + dxy_after[i].second) / 2;
 	dxy_final.emplace_back(dx, dy);
   }
+
   // 计算 heading
   std::deque<double> front_theta;
   std::vector<double> ds_final;
@@ -128,7 +129,7 @@ void ReferenceLine::CalcKappaTheta() {
 
   std::deque<double> d_theta;
   for (int i = 0; i < xy_set.size() - 1; ++i) {
-	// 计算theta_diff
+	// 计算 theta-diff
 	double theta_diff = front_theta[i + 1] - front_theta[i];
 	d_theta.push_back(theta_diff);
   }
@@ -183,14 +184,14 @@ void ReferenceLine::GetKappa(std::vector<std::pair<double, double>> final_center
   RefMsg.emplace_back(r);
 }
 
-std::pair<double, double> ReferenceLine::CalculateYellowDist(const std::vector<std::pair<double,
-																						 double>> &target_path) {
+std::pair<double, double> CalculateYellowDist(const std::vector<std::pair<double,
+																		  double>> &yellow_points) {
   double x = 0, y = 0;
-  for (auto point : target_path) {
+  for (auto point : yellow_points) {
 	x += point.first;
 	y += point.second;
   }
-  auto target_path_size = double(target_path.size());  // 避免向小范围隐式类型转换导致的编译器警告
+  auto target_path_size = double(yellow_points.size());  // 避免向小范围隐式类型转换导致的编译器警告
   double yellow_dist = pow(x / target_path_size, 2)
 	  + pow(y / target_path_size, 2);
   return std::make_pair(x / target_path_size, yellow_dist);  // x_center dis

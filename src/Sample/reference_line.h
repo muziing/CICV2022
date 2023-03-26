@@ -30,50 +30,44 @@ class ReferenceLine {
   ~ReferenceLine() = default;
 
   /**
-   * @brief 按颜色分别存储所有锥桶坐标
+   * @brief 按颜色分别存储所有锥桶的坐标数据
    *
    * @param pLidar 目标级激光雷达传感器返回的数据
    */
-  void Shape(PanoSimSensorBus::Lidar_ObjList_G *pLidar);
+  void LoadTrafficConeData(PanoSimSensorBus::Lidar_ObjList_G *pLidar);
 
   /**
    * @brief 计算并存储所有中心点（未排序）
    */
-  void CalcCenterPoint();
+  void CalcCenterPoints();
 
   /**
-   * @brief 对所有中心点按路径顺序排序，获得索引
+   * @brief 对所有中心点按路径顺序排序
    */
-  void SortIndex();
+  void SortCenterPoints();
 
   /**
-   * @brief 保存对中心点进行了排序的中心点坐标
-  */
-  void CenterPoint();
-
-  /// 计算 Kappa 与 theta,并保存至 path_points 中
+ * @brief 计算 Kappa 与 theta,并保存至 path_points 中
+ */
   void CalcKappaTheta();
 
   /// 一个迷之又迷、从未被调用过的函数
   void GetKappa(std::vector<std::pair<double, double>> final_center_point_xy);
 
-  /**
-  * @brief 计算到黄色锥桶的距离
-  */
-  static std::pair<double, double> CalculateYellowDist(const std::vector<std::pair<double, double>> &target_path);
-
   std::vector<std::pair<double, double>> GetCenterPointXySort() {
-	return this->center_point_xy_sort;
+	return this->center_points_xy_sorted;
   }
 
   std::vector<std::pair<double, double>> GetCenterPointXyFinal() {
-	return this->center_point_xy_final;
+	return this->center_points_xy_final;
   }
-  std::vector<std::pair<double, double>> GetYellowPointXyFinal() {
+
+  /// 返回所有起终点黄色锥桶的(x, y)坐标
+  std::vector<std::pair<double, double>> GetYellowPoints() {
 	return this->yellow_xy;
   }
   void SetCenterPointXyFinal(const std::vector<std::pair<double, double>> &center_points) {
-	this->center_point_xy_final = center_points;  // FIXME 在进行插值计算之后自动设置，而不是显式调用此函数
+	this->center_points_xy_final = center_points;  // FIXME 在进行插值计算之后自动设置，而不是显式调用此函数
   }
 
  public:
@@ -83,11 +77,9 @@ class ReferenceLine {
   int RefPointCounter{};
   size_t inner = 0;  // 内侧锥桶个数
   size_t outer = 0;  // 外侧锥桶个数
-  std::vector<int> match_point_index_set;  // 存储内外侧锥桶间相匹配关系的索引
   std::vector<std::pair<double, double>> center_point_xy;  // 所有中心点的坐标
-  std::vector<int> match_point_index_set_cen;  // sort index  in "SortIndex"
-  std::vector<std::pair<double, double>> center_point_xy_sort;  // 保存排序后的所有中心点坐标
-  std::vector<std::pair<double, double>> center_point_xy_final;  // 插值后的所有中心点坐标
+  std::vector<std::pair<double, double>> center_points_xy_sorted;  // 保存排序后的所有中心点坐标
+  std::vector<std::pair<double, double>> center_points_xy_final;  // 插值后的所有中心点坐标
   std::vector<std::pair<double, double>> in_xy;  // 存储所有右侧蓝色锥桶的(x, y)坐标
   std::vector<std::pair<double, double>> out_xy;  // 存储所有左侧红色锥桶的(x, y)坐标
   std::vector<std::pair<double, double>> yellow_xy;  // 存储所有起终点黄色锥桶的(x, y)坐标
@@ -99,6 +91,11 @@ double CalculateKappa(Point2d_s p1, Point2d_s p2, Point2d_s p3);
 
 /// 辅助函数，将vector中保存的(x, y)坐标转换为 eigen 的矩阵类型
 Eigen::MatrixXd VectorToEigenMatrix(const std::vector<std::pair<double, double>> &input);
+
+/**
+* @brief 计算到黄色锥桶的距离
+*/
+std::pair<double, double> CalculateYellowDist(const std::vector<std::pair<double, double>> &yellow_points);
 
 /**
  * @brief 插值算法
